@@ -5,12 +5,10 @@ from snowflake.snowpark.context import get_active_session
 
 # Write directly to the app
 st.title(f":cup_with_straw: Customize Your Smoothie! :cup_with_straw:")
-@@ -12,7 +12,9 @@
 st.write("the name on your smoothie will be:",name_on_order )
 from snowflake.snowpark.functions import col
 
-session = get_active_session()
-# session = get_active_session()
+
 cnx= st.connection("snowflake")
 session = cnx.session()
 my_dataframe = session.table("smoothies.public.fruit_options").select(col('FRUIT_NAME'))
