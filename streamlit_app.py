@@ -11,16 +11,13 @@ st.title("🥤 Customize Your Smoothie! 🥤")
 st.write("Choose the fruits you want in your custom smoothie!")
 
 # ---------------------------
-#  API CALL (FIXED)
+#  API CALL (example fruit)
 # ---------------------------
 smoothiefroot_response = requests.get("https://my.smoothiefroot.com/api/fruit/watermelon")
 api_json = smoothiefroot_response.json()
-
-# Convert to DataFrame properly
 api_df = pd.DataFrame([api_json])
 
-# Display API Data
-st.subheader("Fruit Info from SmoothieFroot API")
+st.subheader("Fruit Info Example (Watermelon)")
 st.dataframe(api_df, use_container_width=True)
 
 # ---------------------------
@@ -35,9 +32,8 @@ st.write("The name on your smoothie will be:", name_on_order)
 cnx = st.connection("snowflake")
 session = cnx.session()
 
-# Read fruit list from Snowflake
 fruit_table = session.table("smoothies.public.fruit_options").select(col('FRUIT_NAME'))
-fruit_list = [row["FRUIT_NAME"] for row in fruit_table.collect()]   # Convert to Python list
+fruit_list = [row["FRUIT_NAME"] for row in fruit_table.collect()]
 
 # ---------------------------
 #  MULTISELECT FOR INGREDIENTS
@@ -45,19 +41,38 @@ fruit_list = [row["FRUIT_NAME"] for row in fruit_table.collect()]   # Convert to
 ingredients_list = st.multiselect("Choose up to 5 ingredients:", fruit_list, max_selections=5)
 
 if ingredients_list:
-    # Join selected fruits into string
-    ingredients_string = " ".join(ingredients_list)
 
-    # SQL Insert (corrected spacing)
+    ingredients_string = ""
+
+    # ---------------------------
+    #  ADDING YOUR SNIPPET HERE
+    # ---------------------------
+    for fruit_chosen in ingredients_list:
+
+        ingredients_string += fruit_chosen + " "
+
+        # SHOW CATEGORY HEADER
+        st.subheader(f"{fruit_chosen} • Nutrition Information")
+
+        # CALL API FOR EACH FRUIT
+        smoothiefroot_response = requests.get("https://my.smoothiefroot.com/api/fruit/" + fruit_chosen)
+
+        # CONVERT JSON TO DATAFRAME
+        fruit_df = pd.DataFrame([smoothiefroot_response.json()])
+
+        # SHOW NUTRITION TABLE
+        st.dataframe(fruit_df, use_container_width=True)
+
+    # ---------------------------
+    #  INSERT SQL
+    # ---------------------------
     my_insert_stmt = f"""
         INSERT INTO smoothies.public.orders (ingredients, name_on_order)
         VALUES ('{ingredients_string}', '{name_on_order}')
     """
 
-    # Submit Button
     if st.button("Submit Order"):
         session.sql(my_insert_stmt).collect()
         st.success("Your Smoothie is ordered! ✅")
 
-    # Show SQL for debugging
     st.code(my_insert_stmt)
