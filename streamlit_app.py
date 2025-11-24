@@ -20,10 +20,10 @@ st.write("The name on your smoothie will be:", name_on_order)
 my_dataframe = session.table("smoothies.public.fruit_options") \
                       .select(col("FRUIT_NAME"), col("SEARCH_ON"))
 
-# Convert Snowpark DF → Pandas DF for .loc usage
+# Convert Snowpark DF → Pandas DF so we can use .loc[]
 pd_df = my_dataframe.to_pandas()
 
-# Show the dataframe (optional for debugging)
+# Debug view if needed
 # st.dataframe(pd_df)
 # st.stop()
 
@@ -36,36 +36,37 @@ ingredients_list = st.multiselect(
 
 if ingredients_list:
 
-    # Build ingredients string for DB insert
     ingredients_string = " ".join(ingredients_list)
 
-    # Loop through each fruit selected
+    # For each selected fruit...
     for fruit_chosen in ingredients_list:
 
-        # Get SEARCH_ON value using pandas LOC
+        # Get SEARCH_ON value
         search_on = pd_df.loc[
-            pd_df["FRUIT_NAME"] == fruit_chosen, "SEARCH_ON"
+            pd_df['FRUIT_NAME'] == fruit_chosen, 'SEARCH_ON'
         ].iloc[0]
 
         st.write(f"The search value for {fruit_chosen} is {search_on}.")
 
-        # Call SmoothieFroot API
+        # API Call
         st.subheader(f"{fruit_chosen} Nutrition Information")
 
         smoothiefroot_response = requests.get(
             f"https://my.smoothiefroot.com/api/fruit/{search_on}"
         )
 
-        # Display JSON response as table
         st.dataframe(
             data=smoothiefroot_response.json(),
             use_container_width=True
         )
 
-    # Insert order into Orders table
+    # Add ORDER_FILLED selection
+    order_filled = st.checkbox("Mark order as FILLED?")
+
+    # Insert order SQL
     insert_sql = f"""
-        INSERT INTO smoothies.public.orders(ingredients, name_on_order)
-        VALUES ('{ingredients_string}', '{name_on_order}')
+        INSERT INTO smoothies.public.orders(ingredients, name_on_order, order_filled)
+        VALUES ('{ingredients_string}', '{name_on_order}', {str(order_filled).upper()})
     """
 
     if st.button("Submit Order"):
