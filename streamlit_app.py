@@ -61,16 +61,17 @@ if ingredients_list:
         )
 
     # Add ORDER_FILLED selection
+    # Add ORDER_FILLED selection
     order_filled = st.checkbox("Mark order as FILLED?")
-
-    # Insert order SQL
+    
+    # Insert order SQL (corrected)
     insert_sql = f"""
-        INSERT INTO smoothies.public.orders(ingredients, name_on_order, order_filled)
-        VALUES ('{ingredients_string}', '{name_on_order}', {str(order_filled).upper()})
+        INSERT INTO smoothies.public.orders(ingredients, name_on_order, order_filled, order_ts)
+        VALUES ('{ingredients_string}', '{name_on_order}', {str(order_filled).upper()}, CURRENT_TIMESTAMP())
     """
-
+    
     if st.button("Submit Order"):
         session.sql(insert_sql).collect()
         st.success("Your Smoothie is ordered!", icon="✅")
-
+    
     st.write(insert_sql)
