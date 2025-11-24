@@ -1,90 +1,41 @@
 # Import python packages
 import streamlit as st
-import pandas as pd
-import requests
+# from snowflake.snowpark.context import get_active_session
+
+# Write directly to the app
+st.title(f":cup_with_straw: Customize Your Smoothie! :cup_with_straw:")
+st.write(
+  """cHOOSE THE FRUTS YOU WANT IN YOUR CUSTOM SMOOTHIE!
+  """)
+
+name_on_order = st.text_input("Name on Smoothi:")
+st.write("the name on your smoothie will be:",name_on_order )
 from snowflake.snowpark.functions import col
 
-# ---------------------------
-#  PAGE TITLE
-# ---------------------------
-st.title("🥤 Customize Your Smoothie! 🥤")
-st.write("Choose the fruits you want in your custom smoothie!")
-
-
-# ---------------------------
-#  API CALL TO SMOOTHIEFROOT
-# ---------------------------
-smoothiefroot_response = requests.get(
-    "https://my.smoothiefroot.com/api/fruit/watermelon"
-)
-
-# Convert API JSON into a DataFrame
-api_json = smoothiefroot_response.json()
-api_df = pd.DataFrame([api_json])
-
-# Display API Data
-st.subheader("Fruit Info from SmoothieFroot API")
-st.dataframe(api_df, use_container_width=True)
-
-
-# ---------------------------
-#  GET NAME ON ORDER
-# ---------------------------
-name_on_order = st.text_input("Name on Smoothie:")
-st.write("The name on your smoothie will be:", name_on_order)
-
-
-# ---------------------------
-#  SNOWFLAKE CONNECTION
-# ---------------------------
-cnx = st.connection("snowflake")
+# session = get_active_session()
+cnx= st.connection("snowflake")
 session = cnx.session()
+my_dataframe = session.table("smoothies.public.fruit_options").select(col('FRUIT_NAME'))
+# st.dataframe(data=my_dataframe, use_container_width=True)
 
-# Load fruit options from Snowflake table
-fruit_table = (
-    session.table("smoothies.public.fruit_options")
-    .select(col("FRUIT_NAME"))
-)
-
-# Convert Snowflake result to list
-fruit_options = [row["FRUIT_NAME"] for row in fruit_table.collect()]
-
-
-# ---------------------------
-#  MULTISELECT FOR INGREDIENTS
-# ---------------------------
-ingredients_list = st.multiselect(
-    "Choose up to 5 ingredients:",
-    fruit_options,
-    max_selections=5
-)
-
-# If the user selected ingredients
+ingredients_list = st.multiselect('Choose up to 5 ingredients:'
+                                ,my_dataframe)
 if ingredients_list:
+    # st.write(ingredients_list)
+    # st.text(ingredients_list)
 
-    # Convert list → space-separated string
-    ingredients_string = " ".join(ingredients_list)
-
-    # Safe INSERT statement using Snowpark parameters (no SQL injection)
-    my_insert_stmt = """
-        INSERT INTO smoothies.public.orders(ingredients, name_on_order)
-        VALUES (:ingredients, :name)
-    """
-
-    # Submit button
-    if st.button("Submit Order"):
-        session.sql(
-            my_insert_stmt,
-            {
-                "ingredients": ingredients_string,
-                "name": name_on_order
-            }
-        ).collect()
-
-        st.success("Your Smoothie is ordered! ✅")
-
-    # Display the SQL for debugging
-    st.code(
-        f"INSERT INTO smoothies.public.orders(ingredients, name_on_order)\n"
-        f"VALUES ('{ingredients_string}', '{name_on_order}')"
-    )
+    ingredients_string =''
+    for each_fruit in ingredients_list:
+        ingredients_string+=each_fruit + ' '
+    # st.write(ingredients_string)
+ 
+    my_insert_stmt = """ insert into smoothies.public.orders(ingredients, name_on_order)
+                values ('"""  + ingredients_string + """',' """  + name_on_order + """')"""
+    # st.write(my_insert_stmt)
+    # st.stop()
+    time_to_insert =st.button("Submit Order")
+    if time_to_insert:
+        session.sql(my_insert_stmt).collect()
+        st.success('Your Smoothie is ordered!', icon="✅")
+    st.write(my_insert_stmt)
+    
