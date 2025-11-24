@@ -1,7 +1,7 @@
 # Import python packages
 import streamlit as st
-import requests
 import pandas as pd
+import requests
 from snowflake.snowpark.functions import col
 
 # ---------------------------
@@ -10,15 +10,18 @@ from snowflake.snowpark.functions import col
 st.title("🥤 Customize Your Smoothie! 🥤")
 st.write("Choose the fruits you want in your custom smoothie!")
 
-# ---------------------------
-#  API CALL (example fruit)
-# ---------------------------
-smoothiefroot_response = requests.get("https://my.smoothiefroot.com/api/fruit/watermelon")
-api_json = smoothiefroot_response.json()
-api_df = pd.DataFrame([api_json])
 
-st.subheader("Fruit Info Example (Watermelon)")
-st.dataframe(api_df, use_container_width=True)
+# ---------------------------
+#  API EXAMPLE (WATERMELON DEMO)
+# ---------------------------
+try:
+    example_response = requests.get("https://my.smoothiefroot.com/api/fruit/watermelon")
+    example_df = pd.DataFrame([example_response.json()])
+    st.subheader("Example Nutrition Data (Watermelon)")
+    st.dataframe(example_df, use_container_width=True)
+except:
+    st.warning("SmoothieFroot API not reachable right now.")
+
 
 # ---------------------------
 #  NAME ON ORDER
@@ -26,53 +29,76 @@ st.dataframe(api_df, use_container_width=True)
 name_on_order = st.text_input("Name on Smoothie:")
 st.write("The name on your smoothie will be:", name_on_order)
 
+
 # ---------------------------
 #  SNOWFLAKE CONNECTION
 # ---------------------------
 cnx = st.connection("snowflake")
 session = cnx.session()
 
-fruit_table = session.table("smoothies.public.fruit_options").select(col('FRUIT_NAME'))
-fruit_list = [row["FRUIT_NAME"] for row in fruit_table.collect()]
+# Read GUI name + API name from Snowflake
+fruit_table = session.table("smoothies.public.fruit_options").select(
+    "FRUIT_NAME", "SEARCH_ON"
+)
+
+rows = fruit_table.collect()
+
+# Lookup dictionary: GUI name → API search value
+fruit_lookup = {row["FRUIT_NAME"]: row["SEARCH_ON"] for row in rows}
+
+# GUI list
+fruit_names = list(fruit_lookup.keys())
+
 
 # ---------------------------
-#  MULTISELECT FOR INGREDIENTS
+#  MULTISELECT
 # ---------------------------
-ingredients_list = st.multiselect("Choose up to 5 ingredients:", fruit_list, max_selections=5)
+ingredients_list = st.multiselect(
+    "Choose up to 5 ingredients:",
+    fruit_names,
+    max_selections=5
+)
 
+
+# ---------------------------
+#  SHOW NUTRITION INFO FOR EACH SELECTED FRUIT
+# ---------------------------
 if ingredients_list:
 
     ingredients_string = ""
 
-    # ---------------------------
-    #  ADDING YOUR SNIPPET HERE
-    # ---------------------------
     for fruit_chosen in ingredients_list:
 
+        # Build the string for inserting into Snowflake
         ingredients_string += fruit_chosen + " "
 
-        # SHOW CATEGORY HEADER
+        api_name = fruit_lookup[fruit_chosen]    # <- fixes Strawberries → Strawberry
+
         st.subheader(f"{fruit_chosen} • Nutrition Information")
 
-        # CALL API FOR EACH FRUIT
-        smoothiefroot_response = requests.get("https://my.smoothiefroot.com/api/fruit/" + fruit_chosen)
+        try:
+            response = requests.get("https://my.smoothiefroot.com/api/fruit/" + api_name)
 
-        # CONVERT JSON TO DATAFRAME
-        fruit_df = pd.DataFrame([smoothiefroot_response.json()])
+            if response.status_code == 200:
+                fruit_df = pd.DataFrame([response.json()])
+                st.dataframe(fruit_df, use_container_width=True)
+            else:
+                st.error(f"No data found in SmoothieFroot for: {api_name}")
 
-        # SHOW NUTRITION TABLE
-        st.dataframe(fruit_df, use_container_width=True)
+        except Exception as e:
+            st.error(f"Error retrieving data for {api_name}: {e}")
+
 
     # ---------------------------
-    #  INSERT SQL
+    #  INSERT ORDER INTO SNOWFLAKE
     # ---------------------------
-    my_insert_stmt = f"""
+    insert_sql = f"""
         INSERT INTO smoothies.public.orders (ingredients, name_on_order)
         VALUES ('{ingredients_string}', '{name_on_order}')
     """
 
     if st.button("Submit Order"):
-        session.sql(my_insert_stmt).collect()
-        st.success("Your Smoothie is ordered! ✅")
+        session.sql(insert_sql).collect()
+        st.success("Your Smoothie is ordered! 🎉")
 
-    st.code(my_insert_stmt)
+    st.code(insert_sql)
