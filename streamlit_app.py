@@ -1,104 +1,43 @@
 # Import python packages
 import streamlit as st
-import pandas as pd
-import requests
+from snowflake.snowpark.context import get_active_session
 from snowflake.snowpark.functions import col
 
-# ---------------------------
-#  TITLE
-# ---------------------------
-st.title("🥤 Customize Your Smoothie! 🥤")
-st.write("Choose the fruits you want in your custom smoothie!")
+# Write directly to the app
+st.title(":cup_with_straw: Customize Your Smoothie! :cup_with_straw:")
 
+st.write("""Choose the fruits you want in your custom Smoothie!""")
 
-# ---------------------------
-#  API EXAMPLE (WATERMELON DEMO)
-# ---------------------------
-try:
-    example_response = requests.get("https://my.smoothiefroot.com/api/fruit/watermelon")
-    example_df = pd.DataFrame([example_response.json()])
-    st.subheader("Example Nutrition Data (Watermelon)")
-    st.dataframe(example_df, use_container_width=True)
-except:
-    st.warning("SmoothieFroot API not reachable right now.")
+name_on_order = st.text_input('Name on Smoothie:')
+st.write('The name on your Smoothie will be:', name_on_order)
+session = get_active_session()
 
+my_dataframe = session.table("smoothies.public.fruit_options").select(col("FRUIT_NAME"))
 
-# ---------------------------
-#  NAME ON ORDER
-# ---------------------------
-name_on_order = st.text_input("Name on Smoothie:")
-st.write("The name on your smoothie will be:", name_on_order)
+#st.dataframe(data=my_dataframe, use_container_width=True)
 
-
-# ---------------------------
-#  SNOWFLAKE CONNECTION
-# ---------------------------
-cnx = st.connection("snowflake")
-session = cnx.session()
-
-# Read GUI name + API name from Snowflake
-fruit_table = session.table("smoothies.public.fruit_options").select(
-    "FRUIT_NAME", "SEARCH_ON"
-)
-
-rows = fruit_table.collect()
-
-# Lookup dictionary: GUI name → API search value
-fruit_lookup = {row["FRUIT_NAME"]: row["SEARCH_ON"] for row in rows}
-
-# GUI list
-fruit_names = list(fruit_lookup.keys())
-
-
-# ---------------------------
-#  MULTISELECT
-# ---------------------------
 ingredients_list = st.multiselect(
-    "Choose up to 5 ingredients:",
-    fruit_names,
+    'Choose up to 5 ingredients:',
+    my_dataframe,
     max_selections=5
 )
 
-
-# ---------------------------
-#  SHOW NUTRITION INFO FOR EACH SELECTED FRUIT
-# ---------------------------
 if ingredients_list:
-
-    ingredients_string = ""
+    ingredients_string = ''
 
     for fruit_chosen in ingredients_list:
+        ingredients_string += fruit_chosen + ' '
 
-        # Build the string for inserting into Snowflake
-        ingredients_string += fruit_chosen + " "
+#st.write(ingredients_string)
 
-        api_name = fruit_lookup[fruit_chosen]    # <- fixes Strawberries → Strawberry
+    my_insert_stmt = """ insert into smoothies.public.orders(ingredients, name_on_order)
+                    values ('""" + ingredients_string + """','""" + name_on_order + """')"""
+#st.write(my_insert_stmt)
 
-        st.subheader(f"{fruit_chosen} • Nutrition Information")
+    time_to_insert = st.button('Submit Order')
 
-        try:
-            response = requests.get("https://my.smoothiefroot.com/api/fruit/" + api_name)
-
-            if response.status_code == 200:
-                fruit_df = pd.DataFrame([response.json()])
-                st.dataframe(fruit_df, use_container_width=True)
-            else:
-                st.error(f"No data found in SmoothieFroot for: {api_name}")
-
-        except Exception as e:
-            st.error(f"Error retrieving data for {api_name}: {e}")
-
-
-    # ---------------------------
-    #  INSERT ORDER INTO SNOWFLAKE
-    # ---------------------------
-    insert_sql = f"""
-        INSERT INTO smoothies.public.orders (ingredients, name_on_order)
-        VALUES ('{ingredients_string}', '{name_on_order}')
-    """
-
-    if st.button("Submit Order"):
-        session.sql(insert_sql).collect()
-        st.success("Your Smoothie is ordered! 🎉")
-
-    st.code(insert_sql)
+    if time_to_insert:
+        session.sql(my_insert_stmt).collect()
+    
+        st.success('Your Smoothie is ordered, ' + name_on_order + '!', icon="✅")
+    
